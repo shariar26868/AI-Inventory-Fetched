@@ -7,7 +7,7 @@ services:
     build: .
     container_name: procurement_api
     ports:
-      - "8000:8000"
+      - "8073:8000"
     env_file:
       - .env
     environment:
