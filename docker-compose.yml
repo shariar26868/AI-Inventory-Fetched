@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+
+  # ── FastAPI App ───────────────────────────────────────────────
+  api:
+    build: .
+    container_name: procurement_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+      - MONGODB_DB_NAME=procurement_db
+    volumes:
+      - .:/app                        # hot reload in dev
+      - uploads_data:/app/uploads     # persist uploaded files
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - procurement_net
+
+  # ── MongoDB ───────────────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: procurement_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - procurement_net
+
+  # ── Mongo Express (optional UI) ───────────────────────────────
+  mongo-express:
+    image: mongo-express:latest
+    container_name: procurement_mongo_ui
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin123
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - procurement_net
+
+# ── Volumes ────────────────────────────────────────────────────
+volumes:
+  mongo_data:
+  uploads_data:
+
+# ── Network ────────────────────────────────────────────────────
+networks:
+  procurement_net:
+    driver: bridge
