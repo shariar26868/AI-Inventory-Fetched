@@ -28,7 +28,7 @@ services:
     image: mongo:7.0
     container_name: procurement_mongo
     ports:
-      - "27017:27017"
+      - "27019:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
