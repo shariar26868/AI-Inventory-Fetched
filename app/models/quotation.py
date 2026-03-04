@@ -23,8 +23,8 @@
 # class QuotationModel(BaseModel):
 #     quotation_number: Optional[str] = None  # e.g. PTC-Q-2024-154
 #     project_id: Optional[str] = None        # e.g. PRJ-2026-0001
-#     project_name: Optional[str] = None      # e.g. Marina Bay Hotel
-#     supplier: Optional[str] = None          # e.g. Premium Textiles
+#     rfqId: Optional[str] = None      # e.g. Marina Bay Hotel
+#     vendorId: Optional[str] = None          # e.g. Premium Textiles
 #     total_amount: Optional[str] = None      # e.g. USD 68,750
 #     currency: Optional[str] = None          # e.g. USD
 #     valid_until: Optional[str] = None       # e.g. Mar 23, 2026
@@ -76,8 +76,8 @@ class QuotationItem(BaseModel):
 class QuotationModel(BaseModel):
     quotation_number: Optional[str] = None
     project_id: Optional[str] = None
-    project_name: Optional[str] = None
-    supplier: Optional[str] = None
+    rfqId: Optional[str] = None
+    vendorId: Optional[str] = None
     total_amount: Optional[str] = None
     currency: Optional[str] = None
     valid_until: Optional[str] = None
@@ -96,8 +96,8 @@ class QuotationModel(BaseModel):
 class QuotationUploadResponse(BaseModel):
     batch_id: str
     project_id: str
-    project_name: Optional[str] = None
-    supplier: Optional[str] = None
+    rfqId: Optional[str] = None
+    vendorId: Optional[str] = None
     total_amount: Optional[str] = None
     currency: Optional[str] = None
     valid_until: Optional[str] = None

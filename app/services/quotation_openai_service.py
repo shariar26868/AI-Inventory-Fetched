@@ -13,8 +13,8 @@ Always return a valid JSON object with a key "quotations" containing an array.
 Each quotation object must have:
 - quotation_number: Quotation/PO reference number (e.g. PTC-Q-2024-154)
 - project_id: Project ID or code (e.g. PRJ-2026-0001)
-- project_name: Hotel or company name (e.g. Marina Bay Hotel)
-- supplier: Supplier or vendor name (e.g. Premium Textiles)
+- rfqId: Hotel or company name (e.g. Marina Bay Hotel)
+- vendorId: vendorId or vendor name (e.g. Premium Textiles)
 - total_amount: Total amount as string (e.g. "USD 68,750")
 - currency: Currency code (e.g. "USD")
 - valid_until: Validity date as string (e.g. "Mar 23, 2026")
@@ -34,12 +34,12 @@ Rules:
 - Return ONLY valid JSON. No explanation, no markdown.
 
 Example:
-{"quotations": [{"quotation_number": "PTC-Q-2024-154", "project_id": "PRJ-2026-0001", "project_name": "Marina Bay Hotel", "supplier": "Premium Textiles", "total_amount": "USD 68,750", "currency": "USD", "valid_until": "Mar 23, 2026", "payment_terms": "40% advance, 60% on delivery", "delivery_terms": "DDP Dubai", "items": [{"item_name": "Blackout Curtains - Full Drop", "quantity": "50", "unit_price": "USD 275", "total": "USD 54,750", "remarks": "100% blackout lining", "item_type": "As Specified"}]}]}
+{"quotations": [{"quotation_number": "PTC-Q-2024-154", "project_id": "PRJ-2026-0001", "rfqId": "Marina Bay Hotel", "vendorId": "Premium Textiles", "total_amount": "USD 68,750", "currency": "USD", "valid_until": "Mar 23, 2026", "payment_terms": "40% advance, 60% on delivery", "delivery_terms": "DDP Dubai", "items": [{"item_name": "Blackout Curtains - Full Drop", "quantity": "50", "unit_price": "USD 275", "total": "USD 54,750", "remarks": "100% blackout lining", "item_type": "As Specified"}]}]}
 """
 
 REQUIRED_QUOTATION_FIELDS = [
-    "quotation_number", "project_id", "project_name",
-    "supplier", "total_amount", "valid_until"
+    "quotation_number", "project_id", "rfqId",
+    "vendorId", "total_amount", "valid_until"
 ]
 
 
@@ -112,8 +112,8 @@ async def extract_quotations_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dic
                     all_results.append({
                         "quotation_number": row.get("quotation_number") or row.get("Quotation No") or row.get("PO No"),
                         "project_id": row.get("project_id") or row.get("Project ID"),
-                        "project_name": row.get("project_name") or row.get("Project"),
-                        "supplier": row.get("supplier") or row.get("Supplier"),
+                        "rfqId": row.get("rfqId") or row.get("Project"),
+                        "vendorId": row.get("vendorId") or row.get("vendorId"),
                         "total_amount": row.get("total_amount") or row.get("Total Amount"),
                         "currency": row.get("currency") or row.get("Currency"),
                         "valid_until": row.get("valid_until") or row.get("Valid Until"),

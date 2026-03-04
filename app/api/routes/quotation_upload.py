@@ -137,8 +137,8 @@
 #         doc = {
 #             "quotation_number": q.get("quotation_number") or f"QT-{uuid.uuid4().hex[:8].upper()}",  # fallback ID if null
 #             "project_id": project_id,
-#             "project_name": q.get("project_name"),
-#             "supplier": q.get("supplier"),
+#             "rfqId": q.get("rfqId"),
+#             "vendorId": q.get("vendorId"),
 #             "total_amount": q.get("total_amount"),
 #             "currency": q.get("currency"),
 #             "valid_until": q.get("valid_until"),
@@ -273,8 +273,8 @@ async def ensure_no_bad_indexes():
 async def upload_quotation(
     # ── User Input Fields ─────────────────────────────────────────
     project_id: str = Form(..., description="Project ID"),
-    project_name: Optional[str] = Form(None, description="Project / Hotel name"),
-    supplier: Optional[str] = Form(None, description="Supplier / Vendor name"),
+    rfqId: Optional[str] = Form(None, description="Project / Hotel name"),
+    vendorId: Optional[str] = Form(None, description="vendorId / Vendor name"),
     total_amount: Optional[str] = Form(None, description="Total amount e.g. USD 68,750"),
     currency: Optional[str] = Form(None, description="Currency e.g. USD"),
     valid_until: Optional[str] = Form(None, description="Validity date e.g. Mar 23, 2026"),
@@ -286,7 +286,7 @@ async def upload_quotation(
 ):
     """
     Upload Excel and/or PDF quotation files.
-    Header fields (project_name, supplier, etc.) are taken from user input.
+    Header fields (rfqId, vendorId, etc.) are taken from user input.
     AI extracts only the line items from the file.
     """
     excel_provided = excel_file and excel_file.filename
@@ -364,8 +364,8 @@ async def upload_quotation(
         doc = {
             "quotation_number": q.get("quotation_number") or f"QT-{uuid.uuid4().hex[:8].upper()}",
             "project_id": project_id,
-            "project_name": project_name,
-            "supplier": supplier,
+            "rfqId": rfqId,
+            "vendorId": vendorId,
             "total_amount": total_amount,
             "currency": currency,
             "valid_until": valid_until,
@@ -400,8 +400,8 @@ async def upload_quotation(
     return QuotationUploadResponse(
         batch_id=batch_id,
         project_id=project_id,
-        project_name=project_name,
-        supplier=supplier,
+        rfqId=rfqId,
+        vendorId=vendorId,
         total_amount=total_amount,
         currency=currency,
         valid_until=valid_until,
