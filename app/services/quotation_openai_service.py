@@ -22,6 +22,8 @@ Each quotation object must have:
 - delivery_terms: Delivery terms (e.g. "DDP Dubai, custom made 5-6 weeks")
 - items: Array of item objects, each with:
     - item_name: Name of the item
+    - description: Full product description/specs
+    - commodity: Category (e.g. Furniture, Electronics)
     - quantity: Quantity as string
     - unit_price: Unit price as string
     - total: Total price as string
@@ -34,7 +36,7 @@ Rules:
 - Return ONLY valid JSON. No explanation, no markdown.
 
 Example:
-{"quotations": [{"quotation_number": "PTC-Q-2024-154", "project_id": "PRJ-2026-0001", "rfqId": "Marina Bay Hotel", "vendorId": "Premium Textiles", "total_amount": "USD 68,750", "currency": "USD", "valid_until": "Mar 23, 2026", "payment_terms": "40% advance, 60% on delivery", "delivery_terms": "DDP Dubai", "items": [{"item_name": "Blackout Curtains - Full Drop", "quantity": "50", "unit_price": "USD 275", "total": "USD 54,750", "remarks": "100% blackout lining", "item_type": "As Specified"}]}]}
+{"quotations": [{"quotation_number": "PTC-Q-2024-154", "project_id": "PRJ-2026-0001", "rfqId": "Marina Bay Hotel", "vendorId": "Premium Textiles", "total_amount": "USD 68,750", "currency": "USD", "valid_until": "Mar 23, 2026", "payment_terms": "40% advance, 60% on delivery", "delivery_terms": "DDP Dubai", "items": [{"item_name": "Blackout Curtains - Full Drop", "description": "100% blackout lining, custom fit", "commodity": "Curtains", "quantity": "50", "unit_price": "USD 275", "total": "USD 54,750", "remarks": "Include installation", "item_type": "As Specified"}]}]}
 """
 
 REQUIRED_QUOTATION_FIELDS = [

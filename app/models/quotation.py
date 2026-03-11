@@ -66,6 +66,8 @@ class QuotationStatus(str, Enum):
 
 class QuotationItem(BaseModel):
     item_name: Optional[str] = None
+    description: Optional[str] = None
+    commodity: Optional[str] = None
     quantity: Optional[str] = None
     unit_price: Optional[str] = None
     total: Optional[str] = None

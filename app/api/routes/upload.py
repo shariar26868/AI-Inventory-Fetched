@@ -146,12 +146,14 @@ from app.services.excel_parser import parse_excel
 from app.services.pdf_parser import parse_pdf
 from app.services.openai_service import extract_items_with_ai
 from app.services.combiner import combine_and_prepare
+from app.services.image_parser import extract_items_from_image
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXCEL = {".xlsx", ".xls"}
 ALLOWED_PDF = {".pdf"}
+ALLOWED_IMAGE = {".png", ".jpg", ".jpeg"}
 
 
 async def save_upload(file: UploadFile, upload_dir: str) -> str:
@@ -174,6 +176,7 @@ async def upload_files(
     project_id: str = Form(..., description="Project ID to associate items with"),
     excel_file: UploadFile = File(None, description="Excel file (.xlsx or .xls)"),
     pdf_file: UploadFile = File(None, description="PDF file (.pdf)"),
+    image_file: UploadFile = File(None, description="Image file (.png, .jpg, .jpeg)"),
 ):
     """
     Upload Excel and/or PDF files with a project ID.
@@ -181,12 +184,14 @@ async def upload_files(
     """
     excel_provided = excel_file and excel_file.filename
     pdf_provided = pdf_file and pdf_file.filename
+    image_provided = image_file and image_file.filename
 
-    if not excel_provided and not pdf_provided:
-        raise HTTPException(status_code=400, detail="Please upload at least one file (Excel or PDF).")
+    if not excel_provided and not pdf_provided and not image_provided:
+        raise HTTPException(status_code=400, detail="Please upload at least one file (Excel, PDF, or Image).")
 
     batch_id = str(uuid.uuid4())
     all_raw_rows = []
+    image_items = []
 
     # ── Parse Excel ──────────────────────────────────────────────
     if excel_provided:
@@ -214,14 +219,33 @@ async def upload_files(
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"PDF parse failed: {str(e)}")
 
-    if not all_raw_rows:
+    if not all_raw_rows and not image_provided:
         raise HTTPException(status_code=422, detail="No data could be extracted from the uploaded files.")
 
-    # ── AI Extraction ─────────────────────────────────────────────
+    # ── AI Extraction for Excel/PDF ──────────────────────────────────────
     try:
-        ai_items = await extract_items_with_ai(all_raw_rows)
+        if all_raw_rows:
+            ai_items = await extract_items_with_ai(all_raw_rows)
+        else:
+            ai_items = []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {str(e)}")
+
+    # ── Parse Image ──────────────────────────────────────────────
+    if image_provided:
+        ext = os.path.splitext(image_file.filename)[1].lower()
+        if ext not in ALLOWED_IMAGE:
+            raise HTTPException(status_code=400, detail="Invalid Image file. Allowed: .png, .jpg, .jpeg")
+        path = await save_upload(image_file, settings.UPLOAD_DIR)
+        try:
+            image_extracted = await extract_items_from_image(path)
+            image_items.extend(image_extracted)
+            logger.info(f"Image items extracted: {len(image_extracted)}")
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Image parse failed: {str(e)}")
+
+    # Merge results
+    ai_items.extend(image_items)
 
     # ── Combine + Determine Status ────────────────────────────────
     prepared_items = combine_and_prepare(ai_items, source_label="combined")
