@@ -144,6 +144,9 @@ from app.core.database import get_db
 from app.models.item import UploadResponse
 from app.services.excel_parser import parse_excel
 from app.services.pdf_parser import parse_pdf
+from app.services.docx_parser import parse_docx
+from app.services.pptx_parser import parse_pptx
+from app.services.text_parser import parse_text
 from app.services.openai_service import extract_items_with_ai
 from app.services.combiner import combine_and_prepare
 from app.services.image_parser import extract_items_from_image
@@ -154,6 +157,9 @@ logger = logging.getLogger(__name__)
 ALLOWED_EXCEL = {".xlsx", ".xls"}
 ALLOWED_PDF = {".pdf"}
 ALLOWED_IMAGE = {".png", ".jpg", ".jpeg"}
+ALLOWED_DOCX = {".docx"}
+ALLOWED_PPTX = {".pptx"}
+ALLOWED_TEXT = {".txt"}
 
 
 async def save_upload(file: UploadFile, upload_dir: str) -> str:
@@ -176,6 +182,9 @@ async def upload_files(
     project_id: str = Form(..., description="Project ID to associate items with"),
     excel_file: UploadFile = File(None, description="Excel file (.xlsx or .xls)"),
     pdf_file: UploadFile = File(None, description="PDF file (.pdf)"),
+    docx_file: UploadFile = File(None, description="Word file (.docx)"),
+    pptx_file: UploadFile = File(None, description="PowerPoint file (.pptx)"),
+    txt_file: UploadFile = File(None, description="Text file (.txt)"),
     image_file: UploadFile = File(None, description="Image file (.png, .jpg, .jpeg)"),
 ):
     """
@@ -184,10 +193,13 @@ async def upload_files(
     """
     excel_provided = excel_file and excel_file.filename
     pdf_provided = pdf_file and pdf_file.filename
+    docx_provided = docx_file and docx_file.filename
+    pptx_provided = pptx_file and pptx_file.filename
+    txt_provided = txt_file and txt_file.filename
     image_provided = image_file and image_file.filename
 
-    if not excel_provided and not pdf_provided and not image_provided:
-        raise HTTPException(status_code=400, detail="Please upload at least one file (Excel, PDF, or Image).")
+    if not any([excel_provided, pdf_provided, docx_provided, pptx_provided, txt_provided, image_provided]):
+        raise HTTPException(status_code=400, detail="Please upload at least one file (Excel, PDF, DOCX, PPTX, TXT, or Image).")
 
     batch_id = str(uuid.uuid4())
     all_raw_rows = []
@@ -218,6 +230,45 @@ async def upload_files(
             logger.info(f"PDF rows extracted: {len(rows)}")
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"PDF parse failed: {str(e)}")
+
+    # ── Parse DOCX ───────────────────────────────────────────────
+    if docx_provided:
+        ext = os.path.splitext(docx_file.filename)[1].lower()
+        if ext not in ALLOWED_DOCX:
+            raise HTTPException(status_code=400, detail="Invalid DOCX file. Allowed: .docx")
+        path = await save_upload(docx_file, settings.UPLOAD_DIR)
+        try:
+            rows = parse_docx(path)
+            all_raw_rows.extend(rows)
+            logger.info(f"DOCX entries extracted: {len(rows)}")
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"DOCX parse failed: {str(e)}")
+
+    # ── Parse PPTX ──────────────────────────────────────────────
+    if pptx_provided:
+        ext = os.path.splitext(pptx_file.filename)[1].lower()
+        if ext not in ALLOWED_PPTX:
+            raise HTTPException(status_code=400, detail="Invalid PPTX file. Allowed: .pptx")
+        path = await save_upload(pptx_file, settings.UPLOAD_DIR)
+        try:
+            rows = parse_pptx(path)
+            all_raw_rows.extend(rows)
+            logger.info(f"PPTX slides extracted: {len(rows)}")
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"PPTX parse failed: {str(e)}")
+
+    # ── Parse TXT ────────────────────────────────────────────────
+    if txt_provided:
+        ext = os.path.splitext(txt_file.filename)[1].lower()
+        if ext not in ALLOWED_TEXT:
+            raise HTTPException(status_code=400, detail="Invalid TXT file. Allowed: .txt")
+        path = await save_upload(txt_file, settings.UPLOAD_DIR)
+        try:
+            rows = parse_text(path)
+            all_raw_rows.extend(rows)
+            logger.info(f"TXT lines extracted: {len(rows)}")
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"TXT parse failed: {str(e)}")
 
     if not all_raw_rows and not image_provided:
         raise HTTPException(status_code=422, detail="No data could be extracted from the uploaded files.")

@@ -7,6 +7,9 @@ from enum import Enum
 class FileType(str, Enum):
     EXCEL = "excel"
     PDF = "pdf"
+    DOCX = "docx"
+    PPTX = "pptx"
+    TXT = "txt"
 
 
 class FileUploadRecord(BaseModel):
