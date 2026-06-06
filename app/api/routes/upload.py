@@ -128,10 +128,6 @@
 #         item["_id"] = str(item["_id"])
 #     return {"batch_id": batch_id, "total": len(items), "items": items}
 
-
-
-
-
 import os
 import uuid
 import logging
@@ -141,6 +137,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.file_upload import FileUploadHistoryItem, FileUploadRecord, FileType
 from app.models.item import UploadResponse
 from app.services.excel_parser import parse_excel
 from app.services.pdf_parser import parse_pdf
@@ -162,7 +159,7 @@ ALLOWED_PPTX = {".pptx"}
 ALLOWED_TEXT = {".txt"}
 
 
-async def save_upload(file: UploadFile, upload_dir: str) -> str:
+async def save_upload(file: UploadFile, upload_dir: str) -> tuple[str, int]:
     os.makedirs(upload_dir, exist_ok=True)
     ext = os.path.splitext(file.filename)[1].lower()
     unique_name = f"{uuid.uuid4()}{ext}"
@@ -174,7 +171,66 @@ async def save_upload(file: UploadFile, upload_dir: str) -> str:
 
     with open(file_path, "wb") as f:
         f.write(content)
-    return file_path
+    return file_path, len(content)
+
+
+async def save_and_record_upload(
+    file: UploadFile,
+    upload_dir: str,
+    db,
+    batch_id: str,
+    project_id: str,
+    file_type: FileType,
+) -> tuple[str, int]:
+    file_path, file_size_bytes = await save_upload(file, upload_dir)
+    record = FileUploadRecord(
+        batch_id=batch_id,
+        project_id=project_id,
+        original_filename=file.filename,
+        saved_path=file_path,
+        file_type=file_type,
+        file_size_bytes=file_size_bytes,
+        status="uploaded",
+    )
+    await db["uploaded_files"].insert_one(record.dict())
+    return file_path, file_size_bytes
+
+
+@router.get("/history", response_model=list[FileUploadHistoryItem])
+async def get_upload_history(
+    project_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
+    file_type: Optional[FileType] = None,
+    limit: Optional[int] = 100,
+):
+    """Return upload history with saved file links."""
+    db = get_db()
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    if batch_id:
+        query["batch_id"] = batch_id
+    if file_type:
+        query["file_type"] = file_type.value
+
+    records = await db["uploaded_files"].find(query).sort("uploaded_at", -1).to_list(length=limit)
+    history = []
+    for record in records:
+        history.append({
+            "id": str(record["_id"]),
+            "batch_id": record["batch_id"],
+            "project_id": record.get("project_id"),
+            "original_filename": record["original_filename"],
+            "saved_path": record["saved_path"],
+            "file_type": record["file_type"],
+            "file_size_bytes": record["file_size_bytes"],
+            "rows_extracted": record.get("rows_extracted", 0),
+            "status": record.get("status", "pending"),
+            "error_message": record.get("error_message"),
+            "uploaded_at": record["uploaded_at"],
+            "download_url": f"/uploads/{os.path.basename(record['saved_path'])}",
+        })
+    return history
 
 
 @router.post("/", response_model=UploadResponse)
@@ -202,6 +258,7 @@ async def upload_files(
         raise HTTPException(status_code=400, detail="Please upload at least one file (Excel, PDF, DOCX, PPTX, TXT, or Image).")
 
     batch_id = str(uuid.uuid4())
+    db = get_db()
     all_raw_rows = []
     image_items = []
 
@@ -210,7 +267,7 @@ async def upload_files(
         ext = os.path.splitext(excel_file.filename)[1].lower()
         if ext not in ALLOWED_EXCEL:
             raise HTTPException(status_code=400, detail="Invalid Excel file. Allowed: .xlsx, .xls")
-        path = await save_upload(excel_file, settings.UPLOAD_DIR)
+        path, _ = await save_and_record_upload(excel_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.EXCEL)
         try:
             rows = parse_excel(path)
             all_raw_rows.extend(rows)
@@ -223,7 +280,7 @@ async def upload_files(
         ext = os.path.splitext(pdf_file.filename)[1].lower()
         if ext not in ALLOWED_PDF:
             raise HTTPException(status_code=400, detail="Invalid PDF file. Allowed: .pdf")
-        path = await save_upload(pdf_file, settings.UPLOAD_DIR)
+        path, _ = await save_and_record_upload(pdf_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PDF)
         try:
             rows = parse_pdf(path)
             all_raw_rows.extend(rows)
@@ -236,7 +293,7 @@ async def upload_files(
         ext = os.path.splitext(docx_file.filename)[1].lower()
         if ext not in ALLOWED_DOCX:
             raise HTTPException(status_code=400, detail="Invalid DOCX file. Allowed: .docx")
-        path = await save_upload(docx_file, settings.UPLOAD_DIR)
+        path, _ = await save_and_record_upload(docx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.DOCX)
         try:
             rows = parse_docx(path)
             all_raw_rows.extend(rows)
@@ -249,7 +306,7 @@ async def upload_files(
         ext = os.path.splitext(pptx_file.filename)[1].lower()
         if ext not in ALLOWED_PPTX:
             raise HTTPException(status_code=400, detail="Invalid PPTX file. Allowed: .pptx")
-        path = await save_upload(pptx_file, settings.UPLOAD_DIR)
+        path, _ = await save_and_record_upload(pptx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PPTX)
         try:
             rows = parse_pptx(path)
             all_raw_rows.extend(rows)
@@ -262,7 +319,7 @@ async def upload_files(
         ext = os.path.splitext(txt_file.filename)[1].lower()
         if ext not in ALLOWED_TEXT:
             raise HTTPException(status_code=400, detail="Invalid TXT file. Allowed: .txt")
-        path = await save_upload(txt_file, settings.UPLOAD_DIR)
+        path, _ = await save_and_record_upload(txt_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.TXT)
         try:
             rows = parse_text(path)
             all_raw_rows.extend(rows)
@@ -287,7 +344,7 @@ async def upload_files(
         ext = os.path.splitext(image_file.filename)[1].lower()
         if ext not in ALLOWED_IMAGE:
             raise HTTPException(status_code=400, detail="Invalid Image file. Allowed: .png, .jpg, .jpeg")
-        path = await save_upload(image_file, settings.UPLOAD_DIR)
+        path, _ = await save_and_record_upload(image_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.IMAGE)
         try:
             image_extracted = await extract_items_from_image(path)
             image_items.extend(image_extracted)

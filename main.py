@@ -39,10 +39,14 @@
 
 
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.api.routes import upload, items, admin
 from app.api.routes import quotation_upload          # ← নতুন line
+from app.core.config import settings
 from app.core.database import connect_db, close_db
 
 app = FastAPI(
@@ -58,6 +62,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=os.path.abspath(settings.UPLOAD_DIR)), name="uploads")
 
 app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
 app.include_router(items.router, prefix="/api/items", tags=["Items"])
