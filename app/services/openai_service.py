@@ -73,20 +73,30 @@ async def extract_items_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dict[str
 
                 parsed = json.loads(content)
 
-                # Unwrap {"items": [...]} if needed
+                # Normalize top-level objects into a list of items
                 if isinstance(parsed, dict):
-                    for v in parsed.values():
-                        if isinstance(v, list):
-                            parsed = v
-                            break
+                    if isinstance(parsed.get("items"), list):
+                        parsed = parsed["items"]
                     else:
-                        parsed = []
+                        for v in parsed.values():
+                            if isinstance(v, list):
+                                parsed = v
+                                break
+                        else:
+                            parsed = []
+
+                if not isinstance(parsed, list) or not parsed:
+                    raise ValueError(
+                        f"Unexpected OpenAI response format or empty item list: {type(parsed).__name__}"
+                    )
 
                 all_results.extend(parsed)
                 logger.info(f"AI batch {i // BATCH_SIZE + 1}: extracted {len(parsed)} items")
 
             except Exception as e:
-                logger.error(f"OpenAI error on batch {i // BATCH_SIZE + 1}: {e}")
+                logger.error(
+                    f"OpenAI error on batch {i // BATCH_SIZE + 1}: {e}. Response content: {content if 'content' in locals() else 'n/a'}"
+                )
                 # Fallback: map raw row fields directly
                 for row in batch:
                     all_results.append({
