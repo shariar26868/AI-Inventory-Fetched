@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 
@@ -7,8 +8,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE_MB: int = 50
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_REGION: str = "us-east-2"
     AWS_S3_BUCKET_NAME: str = "transeas"
 
