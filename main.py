@@ -65,6 +65,8 @@ app.add_middleware(
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=os.path.abspath(settings.UPLOAD_DIR)), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory=os.path.abspath(settings.UPLOAD_DIR)), name="api_uploads")
+
 
 app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
 app.include_router(items.router, prefix="/api/items", tags=["Items"])

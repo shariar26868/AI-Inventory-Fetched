@@ -102,3 +102,4 @@ class UploadResponse(BaseModel):
     parsed: int
     needs_review: int
     message: str
+    files: List[dict] = []
