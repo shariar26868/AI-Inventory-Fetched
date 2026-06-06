@@ -75,8 +75,8 @@ class ItemModel(BaseModel):
     source_file: Optional[str] = None
     batch_id: Optional[str] = None
     project_id: Optional[str] = None
-    raw_data: Optional[dict] = {}
-    missing_fields: Optional[List[str]] = []
+    raw_data: Optional[dict] = Field(default_factory=dict)
+    missing_fields: Optional[List[str]] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -102,4 +102,4 @@ class UploadResponse(BaseModel):
     parsed: int
     needs_review: int
     message: str
-    files: List[dict] = []
+    files: List[dict] = Field(default_factory=list)

@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 REQUIRED_FIELDS = ["item_name", "item_code", "description", "qty", "manufacturer", "commodity"]
 
 SYSTEM_PROMPT = """You are a procurement data extraction expert.
-Given raw row data from Excel or PDF files, extract and normalize procurement item information.
+Given raw extracted rows from procurement documents (Excel, PDF, DOCX, PPTX, TXT, or OCR text), extract and normalize procurement item information.
 
+Each row may contain structured columns, paragraph text, slide text, or unstructured fields such as raw_text, Item Name, Description, Qty, or Category.
 Always return a valid JSON object with a key "items" containing an array. Each object must attempt to fill these fields:
 - item_name: Product name
 - item_code: SKU/code (e.g. GR-SAF-009)
@@ -21,8 +22,10 @@ Always return a valid JSON object with a key "items" containing an array. Each o
 
 Rules:
 - If a field cannot be found, set it to null — do NOT guess or fabricate.
+- Use raw_text as input when explicit fields are missing.
 - Return ONLY valid JSON. No explanation, no markdown, no extra text.
-- Merge related rows if they clearly belong to the same item.
+- Prefer one item record per procurement line or product.
+- If the input row does not represent a procurement item, omit it.
 
 Example response format:
 {"items": [{"item_name": "Electronic Safe", "item_code": "GR-SAF-009", "description": "20L capacity", "qty": "50 pcs", "manufacturer": "Kohler", "commodity": "Furniture"}]}
@@ -99,10 +102,11 @@ async def extract_items_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dict[str
                 )
                 # Fallback: map raw row fields directly
                 for row in batch:
+                    raw_text = row.get("raw_text") or row.get("Raw Text") or row.get("text")
                     all_results.append({
                         "item_name": row.get("item_name") or row.get("Item Name") or row.get("Name"),
                         "item_code": row.get("item_code") or row.get("Code") or row.get("SKU"),
-                        "description": row.get("description") or row.get("Description"),
+                        "description": row.get("description") or row.get("Description") or raw_text,
                         "qty": row.get("qty") or row.get("Qty") or row.get("Quantity"),
                         "manufacturer": row.get("manufacturer") or row.get("Manufacturer"),
                         "commodity": row.get("commodity") or row.get("Commodity") or row.get("Category"),

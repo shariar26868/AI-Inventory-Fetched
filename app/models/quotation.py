@@ -85,12 +85,12 @@ class QuotationModel(BaseModel):
     valid_until: Optional[str] = None
     payment_terms: Optional[str] = None
     delivery_terms: Optional[str] = None
-    items: List[QuotationItem] = []
+    items: List[QuotationItem] = Field(default_factory=list)
     status: QuotationStatus = QuotationStatus.PARSED
-    missing_fields: List[str] = []
+    missing_fields: List[str] = Field(default_factory=list)
     batch_id: Optional[str] = None
     source_file: Optional[str] = None
-    raw_data: Optional[dict] = {}
+    raw_data: Optional[dict] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
