@@ -206,6 +206,36 @@ async def save_and_record_upload(
     return file_path, s3_url, file_size_bytes
 
 
+async def process_file_list(
+    files: list[UploadFile],
+    allowed_exts: set[str],
+    parser,
+    file_type: FileType,
+    file_type_name: str,
+    db,
+    batch_id: str,
+    project_id: str,
+    uploaded_files_list: list[dict],
+    all_raw_rows: list,
+) -> None:
+    for file in files:
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in allowed_exts:
+            raise HTTPException(status_code=400, detail=f"Invalid {file_type_name} file. Allowed: {', '.join(sorted(allowed_exts))}")
+        path, s3_url, _ = await save_and_record_upload(file, settings.UPLOAD_DIR, db, batch_id, project_id, file_type)
+        uploaded_files_list.append({
+            "original_filename": file.filename,
+            "download_url": s3_url,
+            "file_type": file_type_name,
+        })
+        try:
+            rows = parser(path)
+            all_raw_rows.extend(rows)
+            logger.info(f"{file_type_name.upper()} rows extracted: {len(rows)}")
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"{file_type_name.upper()} parse failed: {str(e)}")
+
+
 @router.get("/history", response_model=list[FileUploadHistoryItem])
 async def get_upload_history(
     project_id: Optional[str] = None,
@@ -249,25 +279,25 @@ async def get_upload_history(
 @router.post("/", response_model=UploadResponse)
 async def upload_files(
     project_id: str = Form(..., description="Project ID to associate items with"),
-    excel_file: UploadFile = File(None, description="Excel file (.xlsx or .xls)"),
-    pdf_file: UploadFile = File(None, description="PDF file (.pdf)"),
-    docx_file: UploadFile = File(None, description="Word file (.docx)"),
-    pptx_file: UploadFile = File(None, description="PowerPoint file (.pptx)"),
-    txt_file: UploadFile = File(None, description="Text file (.txt)"),
-    image_file: UploadFile = File(None, description="Image file (.png, .jpg, .jpeg)"),
+    excel_file: list[UploadFile] = File(None, description="Excel files (.xlsx or .xls)"),
+    pdf_file: list[UploadFile] = File(None, description="PDF files (.pdf)"),
+    docx_file: list[UploadFile] = File(None, description="Word files (.docx)"),
+    pptx_file: list[UploadFile] = File(None, description="PowerPoint files (.pptx)"),
+    txt_file: list[UploadFile] = File(None, description="Text files (.txt)"),
+    image_file: list[UploadFile] = File(None, description="Image files (.png, .jpg, .jpeg)"),
 ):
     """
     Upload Excel and/or PDF files with a project ID.
     AI extracts all procurement data and saves to MongoDB.
     """
-    excel_provided = excel_file and excel_file.filename
-    pdf_provided = pdf_file and pdf_file.filename
-    docx_provided = docx_file and docx_file.filename
-    pptx_provided = pptx_file and pptx_file.filename
-    txt_provided = txt_file and txt_file.filename
-    image_provided = image_file and image_file.filename
+    excel_files = excel_file or []
+    pdf_files = pdf_file or []
+    docx_files = docx_file or []
+    pptx_files = pptx_file or []
+    txt_files = txt_file or []
+    image_files = image_file or []
 
-    if not any([excel_provided, pdf_provided, docx_provided, pptx_provided, txt_provided, image_provided]):
+    if not any([excel_files, pdf_files, docx_files, pptx_files, txt_files, image_files]):
         raise HTTPException(status_code=400, detail="Please upload at least one file (Excel, PDF, DOCX, PPTX, TXT, or Image).")
 
     batch_id = str(uuid.uuid4())
@@ -277,96 +307,81 @@ async def upload_files(
     uploaded_files_list = []
 
     # ── Parse Excel ──────────────────────────────────────────────
-    if excel_provided:
-        ext = os.path.splitext(excel_file.filename)[1].lower()
-        if ext not in ALLOWED_EXCEL:
-            raise HTTPException(status_code=400, detail="Invalid Excel file. Allowed: .xlsx, .xls")
-        path, s3_url, _ = await save_and_record_upload(excel_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.EXCEL)
-        uploaded_files_list.append({
-            "original_filename": excel_file.filename,
-            "download_url": s3_url,
-            "file_type": "excel"
-        })
-        try:
-            rows = parse_excel(path)
-            all_raw_rows.extend(rows)
-            logger.info(f"Excel rows extracted: {len(rows)}")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Excel parse failed: {str(e)}")
+    if excel_files:
+        await process_file_list(
+            excel_files,
+            ALLOWED_EXCEL,
+            parse_excel,
+            FileType.EXCEL,
+            "excel",
+            db,
+            batch_id,
+            project_id,
+            uploaded_files_list,
+            all_raw_rows,
+        )
 
-    # ── Parse PDF ────────────────────────────────────────────────
-    if pdf_provided:
-        ext = os.path.splitext(pdf_file.filename)[1].lower()
-        if ext not in ALLOWED_PDF:
-            raise HTTPException(status_code=400, detail="Invalid PDF file. Allowed: .pdf")
-        path, s3_url, _ = await save_and_record_upload(pdf_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PDF)
-        uploaded_files_list.append({
-            "original_filename": pdf_file.filename,
-            "download_url": s3_url,
-            "file_type": "pdf"
-        })
-        try:
-            rows = parse_pdf(path)
-            all_raw_rows.extend(rows)
-            logger.info(f"PDF rows extracted: {len(rows)}")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"PDF parse failed: {str(e)}")
+    # ── Parse PDF ──────────────────────────────────────────────
+    if pdf_files:
+        await process_file_list(
+            pdf_files,
+            ALLOWED_PDF,
+            parse_pdf,
+            FileType.PDF,
+            "pdf",
+            db,
+            batch_id,
+            project_id,
+            uploaded_files_list,
+            all_raw_rows,
+        )
 
-    # ── Parse DOCX ───────────────────────────────────────────────
-    if docx_provided:
-        ext = os.path.splitext(docx_file.filename)[1].lower()
-        if ext not in ALLOWED_DOCX:
-            raise HTTPException(status_code=400, detail="Invalid DOCX file. Allowed: .docx")
-        path, s3_url, _ = await save_and_record_upload(docx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.DOCX)
-        uploaded_files_list.append({
-            "original_filename": docx_file.filename,
-            "download_url": s3_url,
-            "file_type": "docx"
-        })
-        try:
-            rows = parse_docx(path)
-            all_raw_rows.extend(rows)
-            logger.info(f"DOCX entries extracted: {len(rows)}")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"DOCX parse failed: {str(e)}")
+    # ── Parse DOCX ──────────────────────────────────────────────
+    if docx_files:
+        await process_file_list(
+            docx_files,
+            ALLOWED_DOCX,
+            parse_docx,
+            FileType.DOCX,
+            "docx",
+            db,
+            batch_id,
+            project_id,
+            uploaded_files_list,
+            all_raw_rows,
+        )
 
     # ── Parse PPTX ──────────────────────────────────────────────
-    if pptx_provided:
-        ext = os.path.splitext(pptx_file.filename)[1].lower()
-        if ext not in ALLOWED_PPTX:
-            raise HTTPException(status_code=400, detail="Invalid PPTX file. Allowed: .pptx")
-        path, s3_url, _ = await save_and_record_upload(pptx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PPTX)
-        uploaded_files_list.append({
-            "original_filename": pptx_file.filename,
-            "download_url": s3_url,
-            "file_type": "pptx"
-        })
-        try:
-            rows = parse_pptx(path)
-            all_raw_rows.extend(rows)
-            logger.info(f"PPTX slides extracted: {len(rows)}")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"PPTX parse failed: {str(e)}")
+    if pptx_files:
+        await process_file_list(
+            pptx_files,
+            ALLOWED_PPTX,
+            parse_pptx,
+            FileType.PPTX,
+            "pptx",
+            db,
+            batch_id,
+            project_id,
+            uploaded_files_list,
+            all_raw_rows,
+        )
 
-    # ── Parse TXT ────────────────────────────────────────────────
-    if txt_provided:
-        ext = os.path.splitext(txt_file.filename)[1].lower()
-        if ext not in ALLOWED_TEXT:
-            raise HTTPException(status_code=400, detail="Invalid TXT file. Allowed: .txt")
-        path, s3_url, _ = await save_and_record_upload(txt_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.TXT)
-        uploaded_files_list.append({
-            "original_filename": txt_file.filename,
-            "download_url": s3_url,
-            "file_type": "txt"
-        })
-        try:
-            rows = parse_text(path)
-            all_raw_rows.extend(rows)
-            logger.info(f"TXT lines extracted: {len(rows)}")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"TXT parse failed: {str(e)}")
+    # ── Parse TXT ──────────────────────────────────────────────
+    if txt_files:
+        await process_file_list(
+            txt_files,
+            ALLOWED_TEXT,
+            parse_text,
+            FileType.TXT,
+            "txt",
+            db,
+            batch_id,
+            project_id,
+            uploaded_files_list,
+            all_raw_rows,
+        )
 
-    if not all_raw_rows and not image_provided:
+    if not all_raw_rows and not image_files:
         raise HTTPException(status_code=422, detail="No data could be extracted from the uploaded files.")
 
     # ── AI Extraction for Excel/PDF ──────────────────────────────────────
@@ -379,22 +394,23 @@ async def upload_files(
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {str(e)}")
 
     # ── Parse Image ──────────────────────────────────────────────
-    if image_provided:
-        ext = os.path.splitext(image_file.filename)[1].lower()
-        if ext not in ALLOWED_IMAGE:
-            raise HTTPException(status_code=400, detail="Invalid Image file. Allowed: .png, .jpg, .jpeg")
-        path, s3_url, _ = await save_and_record_upload(image_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.IMAGE)
-        uploaded_files_list.append({
-            "original_filename": image_file.filename,
-            "download_url": s3_url,
-            "file_type": "image"
-        })
-        try:
-            image_extracted = await extract_items_from_image(path)
-            image_items.extend(image_extracted)
-            logger.info(f"Image items extracted: {len(image_extracted)}")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Image parse failed: {str(e)}")
+    if image_files:
+        for image in image_files:
+            ext = os.path.splitext(image.filename)[1].lower()
+            if ext not in ALLOWED_IMAGE:
+                raise HTTPException(status_code=400, detail="Invalid Image file. Allowed: .png, .jpg, .jpeg")
+            path, s3_url, _ = await save_and_record_upload(image, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.IMAGE)
+            uploaded_files_list.append({
+                "original_filename": image.filename,
+                "download_url": s3_url,
+                "file_type": "image"
+            })
+            try:
+                image_extracted = await extract_items_from_image(path)
+                image_items.extend(image_extracted)
+                logger.info(f"Image items extracted: {len(image_extracted)}")
+            except Exception as e:
+                raise HTTPException(status_code=422, detail=f"Image parse failed: {str(e)}")
 
     # Merge results
     ai_items.extend(image_items)
