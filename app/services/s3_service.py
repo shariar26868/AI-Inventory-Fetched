@@ -8,19 +8,36 @@ logger = logging.getLogger(__name__)
 
 
 def get_s3_client():
-    client_kwargs = {
+    session_kwargs = {
         "region_name": settings.AWS_REGION,
     }
 
     if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
-        client_kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-        client_kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+        session_kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
+        session_kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+        logger.info("Using explicit AWS credentials from settings for S3 client.")
     elif settings.AWS_ACCESS_KEY_ID or settings.AWS_SECRET_ACCESS_KEY:
         logger.warning(
-            "Incomplete AWS credentials configured. boto3 will fall back to the default credential chain."
+            "Incomplete AWS credentials configured in settings. Falling back to boto3's default credential chain."
         )
 
-    return boto3.client("s3", **client_kwargs)
+    session = boto3.Session(**session_kwargs)
+    credentials = session.get_credentials()
+    if credentials:
+        frozen = credentials.get_frozen_credentials()
+        if not frozen.access_key or not frozen.secret_key:
+            logger.error(
+                "AWS credentials are present but incomplete: access key or secret key is blank."
+            )
+            raise NoCredentialsError(
+                "AWS credentials are incomplete or blank. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+            )
+        logger.info("AWS credentials loaded for S3 client. Using region %s.", settings.AWS_REGION)
+    else:
+        logger.error("No AWS credentials found in environment or default credential chain.")
+        raise NoCredentialsError("AWS credentials are missing. Please configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.")
+
+    return session.client("s3")
 
 
 def upload_to_s3(file_path: str, filename: str) -> str:
