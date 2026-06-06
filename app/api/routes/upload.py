@@ -147,6 +147,8 @@ from app.services.text_parser import parse_text
 from app.services.openai_service import extract_items_with_ai
 from app.services.combiner import combine_and_prepare
 from app.services.image_parser import extract_items_from_image
+from app.services.s3_service import upload_to_s3
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -181,8 +183,15 @@ async def save_and_record_upload(
     batch_id: str,
     project_id: str,
     file_type: FileType,
-) -> tuple[str, int]:
+) -> tuple[str, str, int]:
     file_path, file_size_bytes = await save_upload(file, upload_dir)
+    filename = os.path.basename(file_path.replace('\\', '/'))
+    try:
+        s3_url = upload_to_s3(file_path, filename)
+    except Exception as e:
+        logger.error(f"S3 upload failed for {filename}: {e}")
+        s3_url = f"/api/uploads/{filename}"
+
     record = FileUploadRecord(
         batch_id=batch_id,
         project_id=project_id,
@@ -191,9 +200,10 @@ async def save_and_record_upload(
         file_type=file_type,
         file_size_bytes=file_size_bytes,
         status="uploaded",
+        download_url=s3_url,
     )
     await db["uploaded_files"].insert_one(record.dict())
-    return file_path, file_size_bytes
+    return file_path, s3_url, file_size_bytes
 
 
 @router.get("/history", response_model=list[FileUploadHistoryItem])
@@ -218,6 +228,7 @@ async def get_upload_history(
     for record in records:
         saved_path = record["saved_path"]
         filename = os.path.basename(saved_path.replace('\\', '/'))
+        download_url = record.get("download_url") or f"/api/uploads/{filename}"
         history.append({
             "id": str(record["_id"]),
             "batch_id": record["batch_id"],
@@ -230,7 +241,7 @@ async def get_upload_history(
             "status": record.get("status", "pending"),
             "error_message": record.get("error_message"),
             "uploaded_at": record["uploaded_at"],
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": download_url,
         })
     return history
 
@@ -270,11 +281,10 @@ async def upload_files(
         ext = os.path.splitext(excel_file.filename)[1].lower()
         if ext not in ALLOWED_EXCEL:
             raise HTTPException(status_code=400, detail="Invalid Excel file. Allowed: .xlsx, .xls")
-        path, _ = await save_and_record_upload(excel_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.EXCEL)
-        filename = os.path.basename(path.replace('\\', '/'))
+        path, s3_url, _ = await save_and_record_upload(excel_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.EXCEL)
         uploaded_files_list.append({
             "original_filename": excel_file.filename,
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": s3_url,
             "file_type": "excel"
         })
         try:
@@ -289,11 +299,10 @@ async def upload_files(
         ext = os.path.splitext(pdf_file.filename)[1].lower()
         if ext not in ALLOWED_PDF:
             raise HTTPException(status_code=400, detail="Invalid PDF file. Allowed: .pdf")
-        path, _ = await save_and_record_upload(pdf_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PDF)
-        filename = os.path.basename(path.replace('\\', '/'))
+        path, s3_url, _ = await save_and_record_upload(pdf_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PDF)
         uploaded_files_list.append({
             "original_filename": pdf_file.filename,
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": s3_url,
             "file_type": "pdf"
         })
         try:
@@ -308,11 +317,10 @@ async def upload_files(
         ext = os.path.splitext(docx_file.filename)[1].lower()
         if ext not in ALLOWED_DOCX:
             raise HTTPException(status_code=400, detail="Invalid DOCX file. Allowed: .docx")
-        path, _ = await save_and_record_upload(docx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.DOCX)
-        filename = os.path.basename(path.replace('\\', '/'))
+        path, s3_url, _ = await save_and_record_upload(docx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.DOCX)
         uploaded_files_list.append({
             "original_filename": docx_file.filename,
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": s3_url,
             "file_type": "docx"
         })
         try:
@@ -327,11 +335,10 @@ async def upload_files(
         ext = os.path.splitext(pptx_file.filename)[1].lower()
         if ext not in ALLOWED_PPTX:
             raise HTTPException(status_code=400, detail="Invalid PPTX file. Allowed: .pptx")
-        path, _ = await save_and_record_upload(pptx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PPTX)
-        filename = os.path.basename(path.replace('\\', '/'))
+        path, s3_url, _ = await save_and_record_upload(pptx_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.PPTX)
         uploaded_files_list.append({
             "original_filename": pptx_file.filename,
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": s3_url,
             "file_type": "pptx"
         })
         try:
@@ -346,11 +353,10 @@ async def upload_files(
         ext = os.path.splitext(txt_file.filename)[1].lower()
         if ext not in ALLOWED_TEXT:
             raise HTTPException(status_code=400, detail="Invalid TXT file. Allowed: .txt")
-        path, _ = await save_and_record_upload(txt_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.TXT)
-        filename = os.path.basename(path.replace('\\', '/'))
+        path, s3_url, _ = await save_and_record_upload(txt_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.TXT)
         uploaded_files_list.append({
             "original_filename": txt_file.filename,
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": s3_url,
             "file_type": "txt"
         })
         try:
@@ -377,11 +383,10 @@ async def upload_files(
         ext = os.path.splitext(image_file.filename)[1].lower()
         if ext not in ALLOWED_IMAGE:
             raise HTTPException(status_code=400, detail="Invalid Image file. Allowed: .png, .jpg, .jpeg")
-        path, _ = await save_and_record_upload(image_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.IMAGE)
-        filename = os.path.basename(path.replace('\\', '/'))
+        path, s3_url, _ = await save_and_record_upload(image_file, settings.UPLOAD_DIR, db, batch_id, project_id, FileType.IMAGE)
         uploaded_files_list.append({
             "original_filename": image_file.filename,
-            "download_url": f"/api/uploads/{filename}",
+            "download_url": s3_url,
             "file_type": "image"
         })
         try:

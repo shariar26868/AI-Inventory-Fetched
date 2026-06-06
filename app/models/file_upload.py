@@ -23,6 +23,7 @@ class FileUploadRecord(BaseModel):
     rows_extracted: int = 0
     status: str = "pending"        # pending | uploaded | processing | done | failed
     error_message: Optional[str] = None
+    download_url: Optional[str] = None
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
 
