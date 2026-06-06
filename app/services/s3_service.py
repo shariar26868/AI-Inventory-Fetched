@@ -40,6 +40,18 @@ def get_s3_client():
     return session.client("s3")
 
 
+def generate_presigned_url(s3_client, bucket_name: str, object_name: str, expiration: int = 3600) -> str:
+    try:
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": object_name},
+            ExpiresIn=expiration,
+        )
+    except ClientError as e:
+        logger.error(f"Failed to generate presigned URL for {object_name}: {e}")
+        raise
+
+
 def upload_to_s3(file_path: str, filename: str) -> str:
     """
     Uploads a file to the S3 bucket and returns its public URL.
@@ -54,7 +66,21 @@ def upload_to_s3(file_path: str, filename: str) -> str:
             bucket_name,
             filename
         )
-        
+
+        if settings.AWS_S3_USE_PRESIGNED_URL:
+            presigned_url = generate_presigned_url(
+                s3_client,
+                bucket_name,
+                filename,
+                expiration=settings.AWS_S3_PRESIGNED_URL_EXPIRES_IN,
+            )
+            logger.info(
+                "Successfully uploaded %s and generated presigned URL for S3 bucket %s.",
+                filename,
+                bucket_name,
+            )
+            return presigned_url
+
         region = settings.AWS_REGION
         if region == "us-east-1":
             url = f"https://{bucket_name}.s3.amazonaws.com/{filename}"
