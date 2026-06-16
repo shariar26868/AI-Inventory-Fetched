@@ -40,7 +40,7 @@ async def extract_items_from_image(file_path: str) -> List[Dict[str, Any]]:
             ]
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=600.0) as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
@@ -111,7 +111,7 @@ async def extract_quotations_from_image(file_path: str) -> List[Dict[str, Any]]:
             ]
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=600.0) as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={

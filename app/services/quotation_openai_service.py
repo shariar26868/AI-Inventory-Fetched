@@ -56,10 +56,10 @@ async def extract_quotations_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dic
     """
     Send raw rows to OpenAI and extract structured quotation data.
     """
-    BATCH_SIZE = 20
+    BATCH_SIZE = 50
     all_results = []
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=600.0) as client:
         for i in range(0, len(raw_rows), BATCH_SIZE):
             batch = raw_rows[i: i + BATCH_SIZE]
             batch_text = json.dumps(batch, ensure_ascii=False, default=str)

@@ -37,10 +37,10 @@ async def extract_items_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dict[str
     Send raw rows to OpenAI in batches using httpx directly.
     Avoids openai SDK version/httpx compatibility issues.
     """
-    BATCH_SIZE = 30
+    BATCH_SIZE = 50
     all_results = []
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=600.0) as client:
         for i in range(0, len(raw_rows), BATCH_SIZE):
             batch = raw_rows[i: i + BATCH_SIZE]
             batch_text = json.dumps(batch, ensure_ascii=False, default=str)

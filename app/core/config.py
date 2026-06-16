@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     MONGODB_DB_NAME: str = "procurement_db"
     OPENAI_API_KEY: str = ""
     UPLOAD_DIR: str = "uploads"
-    MAX_FILE_SIZE_MB: int = 50
+    MAX_FILE_SIZE_MB: int = 1024
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_REGION: str = "us-east-2"
