@@ -61,13 +61,21 @@ def upload_to_s3(file_path: str, filename: str) -> str:
 
     try:
         logger.info(f"Uploading file {file_path} to S3 bucket {bucket_name} as {filename}...")
+        
+        # Upload with public-read ACL if AWS_S3_PUBLIC_ACCESS is enabled
+        extra_args = {}
+        if settings.AWS_S3_PUBLIC_ACCESS:
+            extra_args['ACL'] = 'public-read'
+        
         s3_client.upload_file(
             file_path,
             bucket_name,
-            filename
+            filename,
+            ExtraArgs=extra_args
         )
 
-        if settings.AWS_S3_USE_PRESIGNED_URL:
+        # Use presigned URL only if not using public access and presigned URLs are enabled
+        if not settings.AWS_S3_PUBLIC_ACCESS and settings.AWS_S3_USE_PRESIGNED_URL:
             presigned_url = generate_presigned_url(
                 s3_client,
                 bucket_name,
