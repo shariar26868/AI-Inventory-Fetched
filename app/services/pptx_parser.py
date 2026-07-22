@@ -1,11 +1,20 @@
 import logging
 from typing import List, Dict, Any
-from pptx import Presentation
+
+try:
+    from pptx import Presentation
+except ImportError:  # pragma: no cover
+    Presentation = None
 
 logger = logging.getLogger(__name__)
 
 
 def parse_pptx(file_path: str) -> List[Dict[str, Any]]:
+    """Parse a .pptx file or fail clearly when dependency is missing."""
+    if Presentation is None:
+        raise RuntimeError(
+            "Missing dependency python-pptx. Install it with `pip install python-pptx`."
+        )
     """
     Extract text content from PowerPoint slides. Returns one entry per slide
     with `raw_text` and `_slide` metadata.

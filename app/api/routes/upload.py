@@ -133,7 +133,17 @@ import uuid
 import logging
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from typing import Optional
+from typing import Optional, List, Union, Annotated
+from pydantic import BeforeValidator
+
+def validate_upload_file(v):
+    if isinstance(v, UploadFile):
+        return v
+    if isinstance(v, str):
+        return None
+    return v
+
+OptionalUploadFile = Annotated[Union[UploadFile, None], BeforeValidator(validate_upload_file)]
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -141,13 +151,27 @@ from app.models.file_upload import FileUploadHistoryItem, FileUploadRecord, File
 from app.models.item import UploadResponse
 from app.services.excel_parser import parse_excel
 from app.services.pdf_parser import parse_pdf
-from app.services.docx_parser import parse_docx
-from app.services.pptx_parser import parse_pptx
 from app.services.text_parser import parse_text
 from app.services.openai_service import extract_items_with_ai
 from app.services.combiner import combine_and_prepare
 from app.services.image_parser import extract_items_from_image
 from app.services.s3_service import upload_to_s3
+
+try:
+    from app.services.pptx_parser import parse_pptx
+except RuntimeError as exc:
+    parse_pptx = None
+    logging.getLogger(__name__).warning(
+        "pptx parser is unavailable: %s", exc
+    )
+
+try:
+    from app.services.docx_parser import parse_docx
+except RuntimeError as exc:
+    parse_docx = None
+    logging.getLogger(__name__).warning(
+        "docx parser is unavailable: %s", exc
+    )
 
 
 router = APIRouter()
@@ -279,23 +303,23 @@ async def get_upload_history(
 @router.post("/", response_model=UploadResponse)
 async def upload_files(
     project_id: str = Form(..., description="Project ID to associate items with"),
-    excel_file: list[UploadFile] = File(None, description="Excel files (.xlsx or .xls)"),
-    pdf_file: list[UploadFile] = File(None, description="PDF files (.pdf)"),
-    docx_file: list[UploadFile] = File(None, description="Word files (.docx)"),
-    pptx_file: list[UploadFile] = File(None, description="PowerPoint files (.pptx)"),
-    txt_file: list[UploadFile] = File(None, description="Text files (.txt)"),
-    image_file: list[UploadFile] = File(None, description="Image files (.png, .jpg, .jpeg)"),
+    excel_file: List[OptionalUploadFile] = File(default=[], description="Excel files (.xlsx or .xls)"),
+    pdf_file: List[OptionalUploadFile] = File(default=[], description="PDF files (.pdf)"),
+    docx_file: List[OptionalUploadFile] = File(default=[], description="Word files (.docx)"),
+    pptx_file: List[OptionalUploadFile] = File(default=[], description="PowerPoint files (.pptx)"),
+    txt_file: List[OptionalUploadFile] = File(default=[], description="Text files (.txt)"),
+    image_file: List[OptionalUploadFile] = File(default=[], description="Image files (.png, .jpg, .jpeg)"),
 ):
     """
-    Upload Excel and/or PDF files with a project ID.
+    Upload Excel, PDF, DOCX, PPTX, TXT, and/or Image files with a project ID.
     AI extracts all procurement data and saves to MongoDB.
     """
-    excel_files = excel_file or []
-    pdf_files = pdf_file or []
-    docx_files = docx_file or []
-    pptx_files = pptx_file or []
-    txt_files = txt_file or []
-    image_files = image_file or []
+    excel_files = [f for f in (excel_file or []) if f and hasattr(f, "filename") and f.filename]
+    pdf_files = [f for f in (pdf_file or []) if f and hasattr(f, "filename") and f.filename]
+    docx_files = [f for f in (docx_file or []) if f and hasattr(f, "filename") and f.filename]
+    pptx_files = [f for f in (pptx_file or []) if f and hasattr(f, "filename") and f.filename]
+    txt_files = [f for f in (txt_file or []) if f and hasattr(f, "filename") and f.filename]
+    image_files = [f for f in (image_file or []) if f and hasattr(f, "filename") and f.filename]
 
     if not any([excel_files, pdf_files, docx_files, pptx_files, txt_files, image_files]):
         raise HTTPException(status_code=400, detail="Please upload at least one file (Excel, PDF, DOCX, PPTX, TXT, or Image).")
@@ -338,6 +362,11 @@ async def upload_files(
 
     # ── Parse DOCX ──────────────────────────────────────────────
     if docx_files:
+        if parse_docx is None:
+            raise HTTPException(
+                status_code=500,
+                detail="DOCX support is unavailable because python-docx is not installed."
+            )
         await process_file_list(
             docx_files,
             ALLOWED_DOCX,
@@ -353,6 +382,11 @@ async def upload_files(
 
     # ── Parse PPTX ──────────────────────────────────────────────
     if pptx_files:
+        if parse_pptx is None:
+            raise HTTPException(
+                status_code=500,
+                detail="PPTX support is unavailable because python-pptx is not installed."
+            )
         await process_file_list(
             pptx_files,
             ALLOWED_PPTX,

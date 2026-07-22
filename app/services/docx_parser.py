@@ -1,11 +1,20 @@
 import logging
 from typing import List, Dict, Any
-from docx import Document
+
+try:
+    from docx import Document
+except ImportError:  # pragma: no cover
+    Document = None
 
 logger = logging.getLogger(__name__)
 
 
 def parse_docx(file_path: str) -> List[Dict[str, Any]]:
+    """Parse a .docx file or fail clearly when dependency is missing."""
+    if Document is None:
+        raise RuntimeError(
+            "Missing dependency python-docx. Install it with `pip install python-docx`."
+        )
     """
     Parse a .docx file. If tables are present, convert table rows to dicts
     using the first row as headers. Otherwise, return non-empty paragraphs
