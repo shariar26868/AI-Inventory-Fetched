@@ -35,6 +35,14 @@ def parse_pdf(file_path: str) -> List[Dict[str, Any]]:
                                 row_dict[key] = str(cell).strip() if cell else None
                             row_dict["_page"] = page_num
                             row_dict["_source"] = "pdf"
+
+                            meaningful_fields = [
+                                k for k, v in row_dict.items()
+                                if not k.startswith("_") and v is not None and str(v).strip()
+                            ]
+                            if len(meaningful_fields) == 1 and meaningful_fields[0].lower() == "unit":
+                                continue
+
                             all_rows.append(row_dict)
                 else:
                     # Fallback: raw text block
