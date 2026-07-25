@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import httpx
@@ -43,6 +44,8 @@ REQUIRED_QUOTATION_FIELDS = [
     "quotation_number", "project_id", "rfqId",
     "vendorId", "total_amount", "valid_until"
 ]
+MAX_RETRIES = 4
+INITIAL_RETRY_DELAY = 2.0
 
 
 def determine_quotation_status(q: Dict[str, Any]):
@@ -50,6 +53,41 @@ def determine_quotation_status(q: Dict[str, Any]):
     if missing:
         return "Needs Review", missing
     return "Parsed", []
+
+
+async def _post_with_retries(client: httpx.AsyncClient, payload: Dict[str, Any]) -> httpx.Response:
+    for attempt in range(MAX_RETRIES + 1):
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+
+        if response.status_code in {429, 500, 502, 503, 504}:
+            if attempt >= MAX_RETRIES:
+                response.raise_for_status()
+
+            retry_after = response.headers.get("Retry-After")
+            try:
+                delay = float(retry_after) if retry_after else INITIAL_RETRY_DELAY * (2 ** attempt)
+            except ValueError:
+                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+
+            logger.warning(
+                "Quotation OpenAI rate limit or transient error (status %s). Retrying in %.1f seconds.",
+                response.status_code,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        response.raise_for_status()
+        return response
+
+    raise RuntimeError("Quotation OpenAI request failed after retries")
 
 
 async def extract_quotations_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -74,15 +112,7 @@ async def extract_quotations_with_ai(raw_rows: List[Dict[str, Any]]) -> List[Dic
             }
 
             try:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                response.raise_for_status()
+                response = await _post_with_retries(client, payload)
                 data = response.json()
                 content = data["choices"][0]["message"]["content"].strip()
 

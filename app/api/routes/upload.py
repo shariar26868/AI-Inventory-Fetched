@@ -474,14 +474,25 @@ async def upload_files(
     parsed_count = sum(1 for d in docs if d["status"] == "Parsed")
     needs_review_count = sum(1 for d in docs if d["status"] == "Needs Review")
 
+    # ── Serialize docs for response (convert non-JSON-safe types) ──
+    response_items = []
+    for d in docs:
+        item_dict = {k: v for k, v in d.items() if k not in ("_id", "raw_data")}
+        # Convert datetime to string
+        for key in ("created_at", "updated_at"):
+            if key in item_dict and hasattr(item_dict[key], "isoformat"):
+                item_dict[key] = item_dict[key].isoformat()
+        response_items.append(item_dict)
+
     return UploadResponse(
         batch_id=batch_id,
         project_id=project_id,
         total_items=len(docs),
         parsed=parsed_count,
         needs_review=needs_review_count,
-        message=f"✅ {len(docs)} items extracted and saved. {needs_review_count} need review.",
-        files=uploaded_files_list
+        message=f"Extracted {len(docs)} items. {parsed_count} parsed, {needs_review_count} need review.",
+        files=uploaded_files_list,
+        items=response_items,
     )
 
 

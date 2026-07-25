@@ -103,3 +103,4 @@ class UploadResponse(BaseModel):
     needs_review: int
     message: str
     files: List[dict] = Field(default_factory=list)
+    items: List[dict] = Field(default_factory=list)
